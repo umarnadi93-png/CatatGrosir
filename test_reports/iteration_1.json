@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only testing on Expo web preview for CatatGrosir (offline, AsyncStorage). All 4 target flows verified end-to-end in a fresh localStorage: (1) Kasir add new product + suggestion chip for existing product + +1 qty + delete item + save lunas with 'Uang Pas' quick cash → kembalian Rp 0; (2) Status cicil blocks save without customer name, with customer Budi 2000 paid of 10000 → sisa Rp 8.000 shown and tx appears in Piutang; partial 3000 reduces to 5000, Lunasi clears to 0 and item disappears; (3) Riwayat hari ini shows jam, 2 transaksi • Rp 15.000, expand reveals Hapus transaksi; (4) Menu→Rekap period toggle hari/minggu/bulan works and barang terlaris renders; Admin edit/save works and tapping item navigates to /product/[id]; Backup page renders with summary (1 barang • 2 transaksi) and Ekspor/Impor buttons visible. Dashboard reflects live totals: 2 tx, Omzet Rp 15.000, Laba Rp 4.500 (matches 10k+5k and 3k+1.5k). No red screens, no pageerrors. One minor React Native web console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' — informational, not blocking.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Kasir / Admin / Piutang Sheet", "issues": ["Sheet modal content sometimes extends below viewport on 390x844 (default mobile height). Primary action buttons (confirm-payment-button, piutang-full-button, admin-form-save) were initially outside viewport and required manual scrollIntoView during Playwright click. Real users on short devices may need to scroll inside the sheet to reach the primary CTA. Consider making Sheet content scrollable (ScrollView inside) or clamping max height with internal scroll so CTA stays visible."]}
+    ],
+    "react_native_issues": [
+      {"component": "View (likely in Sheet/Modal overlay)", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' on web. Non-blocking but should migrate pointerEvents prop into style={{ pointerEvents: '...' }} for forward compatibility with React Native 0.74+/web."}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Make Sheet component internally scrollable (or set maxHeight with ScrollView) so primary CTAs (Simpan, Lunasi, confirm-payment) remain reachable on small viewports without the user scrolling the whole page.",
+    "Migrate any pointerEvents={...} prop usage to style={{ pointerEvents: '...' }} to silence RN web deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "store.tsx addPayment: after payment reduces status to 'cicil' even if the original status was 'belum' and payment is partial — behavior is correct per spec (any paid amount transitions belum→cicil) but worth confirming with product owner.",
+    "index.tsx openPay sets cash to empty string in both branches (status==='belum' and else) — the ternary is a no-op; harmless but dead code.",
+    "backup.tsx uses globalThis.document for web download — safe on web preview, Platform.OS guard is correct.",
+    "All interactive elements have testIDs; good coverage."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (no backend)", "frontend": "100% (all 4 target flows + dashboard + rekap + admin detail nav verified)"},
+  "seed_data_creation": "Cleared localStorage key catatgrosir_data_v1 at test start; created 1 product (Teh Botol 5000/3500) and 2 transactions (1 cicil 2000/10000 for Budi later lunasi; 1 lunas 5000 uang pas) during the test. Data remains in preview AsyncStorage after the run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Preview URL: https://grosir-catat.preview.emergentagent.com. To reset state: run `localStorage.removeItem('catatgrosir_data_v1')` then reload. Mobile viewport 390x844 default — primary CTAs inside Modal sheets can fall below viewport; use JS click + scrollIntoView in Playwright. All testIDs are stable and match screens in files_of_reference. Routes: /, /piutang, /riwayat, /rekap, /admin, /backup, /product/[id]."
+}
