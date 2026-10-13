@@ -49,7 +49,7 @@ export default function Backup() {
       const text = Platform.OS === "web" ? await (await fetch(uri)).text() : await new File(uri).text();
       const d = JSON.parse(text);
       if (!Array.isArray(d.products) || !Array.isArray(d.transactions)) throw new Error("invalid");
-      setPending({ products: d.products, transactions: d.transactions });
+      setPending({ products: d.products, transactions: d.transactions, categories: d.categories || [] });
     } catch {
       toast("File backup tidak valid", "error");
     }

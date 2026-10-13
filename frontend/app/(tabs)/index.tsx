@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Btn, Input, Sheet, Stat, STATUS_LABEL } from "@/src/components/ui";
 import { dayjs, rp, toNum } from "@/src/format";
 import { usesNativeTabs } from "@/src/navigation";
-import { PayStatus, TxItem, useStore } from "@/src/store";
+import { opPerUnit, PayStatus, txOp, TxItem, useStore } from "@/src/store";
 import { makeStyles, useTheme } from "@/src/theme";
 
 export default function Kasir() {
@@ -21,6 +21,7 @@ export default function Kasir() {
   const [qty, setQty] = useState("1");
   const [sell, setSell] = useState("");
   const [cost, setCost] = useState("");
+  const [newCat, setNewCat] = useState("");
   const [cart, setCart] = useState<TxItem[]>([]);
   const [status, setStatus] = useState<PayStatus>("lunas");
   const [customer, setCustomer] = useState("");
@@ -30,7 +31,7 @@ export default function Kasir() {
 
   const today = useMemo(() => {
     const t = data.transactions.filter((x) => dayjs(x.createdAt).isSame(dayjs(), "day"));
-    return { count: t.length, omzet: t.reduce((a, x) => a + x.total, 0), laba: t.reduce((a, x) => a + x.profit, 0) };
+    return { count: t.length, omzet: t.reduce((a, x) => a + x.total, 0), laba: t.reduce((a, x) => a + x.profit - txOp(x), 0) };
   }, [data.transactions]);
 
   const existing = name.trim() ? findByName(name) : undefined;
@@ -53,13 +54,14 @@ export default function Kasir() {
     if (!p) {
       const sp = toNum(sell);
       if (!sp) return toast("Isi harga jual barang baru", "error");
-      p = createProduct(name, sp, toNum(cost));
+      p = createProduct(name, sp, toNum(cost), newCat ? { categoryId: newCat } : undefined);
     }
     const prod = p;
+    const opCost = opPerUnit(data.categories.find((c) => c.id === prod.categoryId));
     setCart((c) => {
       const idx = c.findIndex((i) => i.productId === prod.id);
       if (idx >= 0) return c.map((i, k) => (k === idx ? { ...i, qty: i.qty + q } : i));
-      return [{ productId: prod.id, name: prod.name, qty: q, price: prod.sellPrice, cost: prod.costPrice }, ...c];
+      return [{ productId: prod.id, name: prod.name, qty: q, price: prod.sellPrice, cost: prod.costPrice, categoryId: prod.categoryId, opCost }, ...c];
     });
     setName("");
     setQty("1");
@@ -165,6 +167,15 @@ export default function Kasir() {
                 <Input testID="input-harga-modal" label="Harga Modal" keyboardType="number-pad" value={cost} onChangeText={setCost} placeholder="0" />
               </View>
             </View>
+          ) : null}
+          {!existing && name.trim() && data.categories.length ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={s.sugRow}>
+              {[{ id: "", name: "Tanpa Kategori" }, ...data.categories].map((c) => (
+                <Pressable key={c.id || "none"} testID={`kasir-cat-${c.id || "none"}`} onPress={() => setNewCat(c.id)} style={[s.catChip, newCat === c.id && s.chipActive]}>
+                  <Text style={[s.chipText, newCat === c.id && s.chipTextActive]}>{c.name}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           ) : null}
           <Text style={s.label}>Qty Pembelian</Text>
           <View style={s.qtyRow}>
@@ -276,6 +287,7 @@ const useStyles = makeStyles((c) => ({
   statusRow: { flexDirection: "row", gap: 8 },
   chip: { flex: 1, height: 40, borderRadius: 10, borderWidth: 1, borderColor: c.border, alignItems: "center", justifyContent: "center", backgroundColor: c.surface },
   chipActive: { backgroundColor: c.brandPrimary, borderColor: c.brandPrimary },
+  catChip: { flexShrink: 0, height: 36, paddingHorizontal: 12, borderRadius: 18, borderWidth: 1, borderColor: c.border, justifyContent: "center", backgroundColor: c.surface },
   chipText: { fontSize: 13, fontWeight: "700", color: c.onSurfaceSecondary },
   chipTextActive: { color: c.onBrandPrimary },
   totalBar: { flexDirection: "row", alignItems: "center", backgroundColor: c.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: c.border },

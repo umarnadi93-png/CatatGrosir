@@ -4,8 +4,10 @@ import { uid } from "@/src/format";
 import { storage } from "@/src/utils/storage";
 
 export type PayStatus = "lunas" | "cicil" | "belum";
-export type Product = { id: string; name: string; sellPrice: number; costPrice: number; createdAt: string };
-export type TxItem = { productId: string; name: string; qty: number; price: number; cost: number };
+export type OpCost = { id: string; name: string; amount: number };
+export type Category = { id: string; name: string; opCosts: OpCost[] };
+export type Product = { id: string; name: string; sellPrice: number; costPrice: number; createdAt: string; categoryId?: string; buyPrice?: number; buyQty?: number };
+export type TxItem = { productId: string; name: string; qty: number; price: number; cost: number; categoryId?: string; opCost?: number };
 export type Payment = { amount: number; date: string };
 export type Tx = {
   id: string;
@@ -19,10 +21,12 @@ export type Tx = {
   change: number;
   createdAt: string;
 };
-export type AppData = { products: Product[]; transactions: Tx[] };
+export type AppData = { products: Product[]; transactions: Tx[]; categories: Category[] };
 
 const KEY = "catatgrosir_data_v1";
 
+export const opPerUnit = (c?: Category) => (c ? c.opCosts.reduce((a, o) => a + o.amount, 0) : 0);
+export const txOp = (t: Tx) => t.items.reduce((a, i) => a + (i.opCost || 0) * i.qty, 0);
 export const paidOf = (t: Tx) => t.payments.reduce((a, p) => a + p.amount, 0);
 export const remainingOf = (t: Tx) => Math.max(0, t.total - paidOf(t));
 
@@ -31,7 +35,9 @@ type Ctx = {
   data: AppData;
   soldCount: Record<string, number>;
   findByName: (name: string) => Product | undefined;
-  createProduct: (name: string, sell: number, cost: number) => Product;
+  createProduct: (name: string, sell: number, cost: number, extra?: Partial<Product>) => Product;
+  saveCategory: (c: Category) => void;
+  deleteCategory: (id: string) => void;
   updateProduct: (id: string, patch: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
   addTransaction: (t: Omit<Tx, "id" | "createdAt">) => Tx;
@@ -45,7 +51,7 @@ type Ctx = {
 const StoreCtx = createContext<Ctx | null>(null);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<AppData>({ products: [], transactions: [] });
+  const [data, setData] = useState<AppData>({ products: [], transactions: [], categories: [] });
   const [ready, setReady] = useState(false);
   const [toastMsg, setToastMsg] = useState<Ctx["toastMsg"]>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -55,7 +61,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (raw) {
         try {
           const d = JSON.parse(raw as string);
-          if (Array.isArray(d.products) && Array.isArray(d.transactions)) setData(d);
+          if (Array.isArray(d.products) && Array.isArray(d.transactions)) setData({ ...d, categories: d.categories || [] });
         } catch {}
       }
       setReady(true);
@@ -83,11 +89,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [data.products],
   );
 
-  const createProduct = (name: string, sell: number, cost: number) => {
-    const p: Product = { id: uid(), name: name.trim(), sellPrice: sell, costPrice: cost, createdAt: new Date().toISOString() };
+  const createProduct = (name: string, sell: number, cost: number, extra?: Partial<Product>) => {
+    const p: Product = { ...extra, id: uid(), name: name.trim(), sellPrice: sell, costPrice: cost, createdAt: new Date().toISOString() };
     setData((d) => ({ ...d, products: [...d.products, p] }));
     return p;
   };
+
+  const saveCategory = (c: Category) =>
+    setData((d) => ({
+      ...d,
+      categories: d.categories.some((x) => x.id === c.id) ? d.categories.map((x) => (x.id === c.id ? c : x)) : [...d.categories, c],
+    }));
+
+  const deleteCategory = (id: string) =>
+    setData((d) => ({
+      ...d,
+      categories: d.categories.filter((c) => c.id !== id),
+      products: d.products.map((p) => (p.categoryId === id ? { ...p, categoryId: undefined } : p)),
+    }));
 
   const updateProduct = (id: string, patch: Partial<Product>) =>
     setData((d) => ({ ...d, products: d.products.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
@@ -115,11 +134,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }),
     }));
 
-  const replaceAll = (d: AppData) => setData(d);
+  const replaceAll = (d: AppData) => setData({ ...d, categories: d.categories || [] });
 
   return (
     <StoreCtx.Provider
-      value={{ ready, data, soldCount, findByName, createProduct, updateProduct, deleteProduct, addTransaction, deleteTransaction, addPayment, replaceAll, toast, toastMsg }}
+      value={{ ready, data, soldCount, findByName, createProduct, saveCategory, deleteCategory, updateProduct, deleteProduct, addTransaction, deleteTransaction, addPayment, replaceAll, toast, toastMsg }}
     >
       {children}
     </StoreCtx.Provider>
